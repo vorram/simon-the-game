@@ -1,16 +1,46 @@
 <template>
   <div class="game">
-    <div class="high-score">High Score: 0</div>
-    <div class="score">Score: 0</div>
-    <div class="game-circle">
-      <div class="sector yellow" id="1"></div>
-      <div class="sector blue" id="2"></div>
-      <div class="sector red" id="3"></div>
-      <div class="sector green" id="4"></div>
+    <div class="high-score">High Score: {{ this.highScore }}</div>
+    <div class="score">Score: {{ this.score }}</div>
+    <div class="gameboard">
+      <div
+        class="square yellow"
+        id="1"
+        v-on:mouseenter="highlight($event)"
+        v-on:mouseleave="removeHighlight($event)"
+        v-on:click="checkMove($event)"
+      ></div>
+      <div
+        class="square blue"
+        id="2"
+        v-on:mouseenter="highlight($event)"
+        v-on:mouseleave="removeHighlight($event)"
+        v-on:click="checkMove($event)"
+      ></div>
+      <div
+        class="square red"
+        id="3"
+        v-on:mouseenter="highlight($event)"
+        v-on:mouseleave="removeHighlight($event)"
+        v-on:click="checkMove($event)"
+      ></div>
+      <div
+        class="square green"
+        id="4"
+        v-on:mouseenter="highlight($event)"
+        v-on:mouseleave="removeHighlight($event)"
+        v-on:click="checkMove($event)"
+      ></div>
     </div>
-    <button id="start" v-on:click="playCombo">START</button>
-    <label for="difficulty">Difficulty:</label>
-    <select id="difficulty" @input="setTimeout($event.target.value)">
+    <div class="message" v-show="!this.gameOver">
+      <p>Round {{ this.level }}</p>
+      <p v-if="!this.controlsEnabled">Playing sequence...</p>
+      <p v-if="this.controlsEnabled">Enter the sequence</p>
+    </div>
+    <div class="game-over" v-if="this.touched && this.gameOver">GAME OVER</div>
+    <button id="start" v-on:click="gameStart" v-show="this.gameOver">START</button>
+    <label for="difficulty" v-show="this.gameOver">Difficulty:</label>
+    <select id="difficulty" @input="setTimeout($event.target.value)" v-show="this.gameOver">
       <option value="easy" selected>Easy</option>
       <option value="medium">Medium</option>
       <option value="hard">Hard</option>
@@ -29,10 +59,12 @@ export default {
       score: 0,
       highScore: 0,
       generatedCombo: [],
-      playerMove: 0,
+      currentMove: 0,
       level: 0,
       controlsEnabled: false,
       timeout: 1500,
+      gameOver: true,
+      touched: false,
     }
   },
   methods: {
@@ -45,8 +77,8 @@ export default {
     setCombo(array) {
       this.generatedCombo = array
     },
-    setPlayerMove(value) {
-      this.playerMove = value
+    setCurrentMove(value) {
+      this.currentMove = value
     },
     setLevel(value) {
       this.level = value
@@ -73,29 +105,82 @@ export default {
       }
       return combo
     },
-    lightUp(sectorNumber) {
-      const sector = document.getElementById(`${sectorNumber}`)
-      const audio = document.querySelector(`audio[data-sound="${sectorNumber}"]`)
+    lightUp(squareNumber) {
+      const square = document.getElementById(`${squareNumber}`)
+      const audio = document.querySelector(`audio[data-sound="${squareNumber}"]`)
       audio.currentTime = 0
       audio.play()
-      sector.classList.add('playing')
+      if (!square.classList.contains('playing')) {
+        square.classList.add('playing')
+      }
       return new Promise((resolve) => {
         setTimeout(() => {
-          sector.classList.remove('playing')
+          square.classList.remove('playing')
           resolve('done')
-        }, 1500)
+        }, this.timeout)
       })
     },
+    highlight(e) {
+      if (this.controlsEnabled) {
+        if (!e.target.classList.contains('playing')) {
+          e.target.classList.add('playing')
+        }
+      }
+    },
+    removeHighlight(e) {
+      if (this.controlsEnabled) {
+        if (e.target.classList.contains('playing')) {
+          e.target.classList.remove('playing')
+        }
+      }
+    },
     async playCombo() {
-      this.setLevel(5)
+      this.setCurrentMove(0)
       this.setCombo(this.generateCombo(this.level))
       for (let i = 0; i < this.generatedCombo.length; i++) {
         await this.lightUp(this.generatedCombo[i])
       }
+      this.controlsEnabled = true
     },
     roundStart() {
-      let newLevel = this.level + 1
+      const newLevel = this.level + 1
       this.setLevel(newLevel)
+      setTimeout(() => {
+        this.playCombo()
+      }, 2000)
+    },
+    gameStart() {
+      if (!this.touched) {
+        this.touched = true
+      }
+      this.gameOver = false
+      this.setScore(0)
+      this.setLevel(0)
+      this.roundStart()
+    },
+    checkMove(e) {
+      if (this.controlsEnabled) {
+        const move = Number(e.target.id)
+        this.lightUp(move)
+        if (move === this.generatedCombo[this.currentMove]) {
+          this.score += 1
+          if (this.score > this.highScore) {
+            this.setHighScore(this.score)
+          }
+          if (this.currentMove === this.generatedCombo.length - 1) {
+            this.controlsEnabled = false
+            this.roundStart()
+          } else {
+            this.currentMove += 1
+          }
+        } else {
+          this.endGame()
+        }
+      }
+    },
+    endGame() {
+      this.gameOver = true
+      this.controlsEnabled = false
     },
   },
 }
@@ -114,13 +199,12 @@ export default {
   margin-bottom: 12px;
 }
 
-.game-circle {
+.gameboard {
   width: 400px;
   height: 400px;
-  border-radius: 50%;
 }
 
-.sector {
+.square {
   width: 50%;
   height: 50%;
   float: left;
@@ -146,30 +230,44 @@ export default {
   margin: -8px 0 0 -8px;
 }
 
-.yellow:hover,
 .yellow.playing {
-  background: #fef9c3;
+  background: #fefce8;
 }
 
-.blue:hover,
 .blue.playing {
-  background: #60a5fa;
+  background: #93c5fd;
 }
 
-.red:hover,
 .red.playing {
-  background: #f87171;
+  background: #fca5a5;
 }
 
-.green:hover,
 .green.playing {
-  background: #4ade80;
+  background: #86efac;
 }
 
 label[for='difficulty'] {
   font-size: 1.3rem;
   display: block;
   text-align: center;
+}
+
+.message {
+  font-size: 1.5em;
+  margin: 20px auto;
+  text-align: center;
+  width: 80%;
+  background: #fcd34d;
+  padding: 12px 36px;
+}
+
+.game-over {
+  margin: 20px auto;
+  text-align: center;
+  width: max-content;
+  padding: 12px 36px;
+  background: #e11d48;
+  font-size: 2em;
 }
 
 #difficulty {
@@ -185,12 +283,12 @@ label[for='difficulty'] {
   margin: 32px auto;
   border-style: none;
   border-radius: 8px;
-  background: #e11d48;
+  background: #15803d;
   color: #fafaf9;
 }
 
 #start:hover {
-  background: #fb7185;
+  background: #22c55e;
   cursor: pointer;
 }
 </style>
